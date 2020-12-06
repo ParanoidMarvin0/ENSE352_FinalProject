@@ -30,8 +30,11 @@ RCC_APB2ENR EQU 0x40021018
 		
 
 ;;Delay Timer
-WAIT_TIME EQU 400000
-		
+WAIT_PLAYER_BLINK 		EQU 0x70000
+GAME_START_WAIT 		EQU 0x400000
+LVL_ONE_BLINK			EQU 300000
+LVL_TWO_BLINK			EQU 260000
+LVL_THREE_BLINK			EQU 220000
 		
 ;;Number of blinks
 NUM_BLINKS EQU 0xF
@@ -56,7 +59,7 @@ Reset_Handler  PROC ;We only have one line of actual application code
 
 	BL ClockInIt
 	BL Set_INPUT_OUTPUT				;;Use Case 1 - System Startup
-	BL TURN_ON_LED
+
 	BL WAITFORPLAYER		;;Use Case 2 - Wait for Player
 	
 GameLoop					
@@ -112,51 +115,96 @@ Set_INPUT_OUTPUT PROC
 	ENDP
 	
 	ALIGN
-TURN_ON_LED PROC
 	
-	LDR R0, =0x13
-	LDR R6, =GPIOA_ODR
-	STR R0, [R6]
-	
-	LDR R6, =GPIOB_ODR
-	LDR R0, =0x1
-	STR R0, [R6]
-	BX LR
-	ENDP
-	ALIGN
 WAITFORPLAYER PROC
-
-waitLoop
+	
 	LDR R6, =GPIOA_ODR   ;;Port A Address
 	LDR R7, =GPIOB_ODR   ;;Port B Address
-	LDR R4, =0x0         ;;Value to turn led off
-	LDR R1, =0x13		;;Value to turn Port A LED on
-	LDR R2, =0x1		;;Value to turn Port B LED on
-	LDR R0, =0x9       ;Count 10 times
+	LDR R3, =0x0 			;;for turning off LED in opposite port
 	
-flashLoop
-	LDR R5, =WAIT_TIME   ;;Delay value
-	STR R4, [R6]         ;;Turn LED off
+	LDR R0, =0x1
+	STR R0, [R6]
+	STR R3, [R7]
+waitForButton
+	;;;;;;;;;;;;;;;;
+	;;Toggle LEDs;;
+	;;;;;;;;;;;;;;;;
+	LDR R5, =WAIT_PLAYER_BLINK   ;;Delay value	
+delay_LED1   ;delay LED On
+	CMP R5, #0
+	SUBNE R5, R5, #1
+	BNE delay_LED1
+
+	LDR R1, [R6]
+	LDR R2, [R7]
+	
+	CMP R1, #1
+	MOVEQ R3, #2
+	MOVEQ R4, #0
+	BEQ toggleLED
+
+	CMP R1, #2
+	MOVEQ R3, #16
+	MOVEQ R4, #0
+	BEQ toggleLED
+	
+	CMP R1, #16
+	MOVEQ R3, #0
+	MOVEQ R4, #1
+	BEQ toggleLED
+	
+	CMP R2, #1
+	MOVEQ R3, #1
+	MOVEQ R4, #0
+	BEQ toggleLED
+	
+toggleLED
+	STR R3, [R6]
 	STR R4, [R7]
+
+;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;Polling Buttons;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;registers: 
+;;		r0 - GPIOA address
+;;		r1 - GPIOB address
+;;		r2 - read codes from GPIO
+;;		r3 - store codes from Port A
+;;		r4 - store codes from Port B
+;;		r5 - store result of AND
+;;		
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+switchLoop
+	LDR R0, =GPIOB_IDR
+	LDR R2, [R0]
+	LDR R1, =0xFFFF
+	EOR R2, R1
+	LDR R1, =0x350   ;bit mask for 0011 0101 0000
+	AND R2, R1 ;R1 contains switch input for SW0
 	
+	CMP R2, #0
+	BGT startButtonPressed
 	
-delay_counter1   ;delay LED On
+	b waitForButton
+
+startButtonPressed
+	LDR R6, =GPIOA_ODR   ;;Port A Address
+	LDR R7, =GPIOB_ODR   ;;Port B Address
+	LDR R1, =0x0
+	STR R1, [R6]
+	STR R1, [R7]
+	
+	LDR R5, =GAME_START_WAIT
+delay_GameStart   ;delay LED On
 	CMP R5, #0
 	SUBNE R5, R5, #1
-	BNE delay_counter1
+	BNE delay_GameStart
 	
-	LDR R5, =WAIT_TIME
-	STR R1, [R6]	;;TURN Led On
+	
+	LDR R1, =0x13
+	LDR R2, =0x1
+	STR R1, [R6]
 	STR R2, [R7]
-delay_counter2   ;delay LED Off
-	CMP R5, #0
-	SUBNE R5, R5, #1
-	BNE delay_counter2
-
-	CMP R0, #0
-	SUBNE R0, R0, #1
-	BNE flashLoop
-
 	BX LR
 	ENDP
 	ALIGN
