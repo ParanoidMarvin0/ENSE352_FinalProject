@@ -32,11 +32,12 @@ RCC_APB2ENR EQU 0x40021018
 ;;Delay Timer
 WAIT_PLAYER_BLINK 		EQU 0x50000
 GAME_START_WAIT 		EQU 0x100000
-LVL_ONE_BLINK			EQU 0x70005
-LVL_TWO_BLINK			EQU 260000
-LVL_THREE_BLINK			EQU 220000
+;;LVL_ONE_BLINK			EQU 0x70005
+;;LVL_TWO_BLINK			EQU 0x60000
+;;LVL_THREE_BLINK			EQU 0x50000
 REACT_TIMER				EQU 0x70005
-
+GAME_END_WAIT			EQU 0x100000
+SCORE_DISPLAY			EQU 0x5000000
 
 ;;;;Random number generator
 RND_A					EQU 1664525
@@ -68,11 +69,7 @@ Reset_Handler  PROC ;We only have one line of actual application code
 	BL Set_INPUT_OUTPUT				;;Use Case 1 - System Startup
 GameLoop
 	BL WAITFORPLAYER		;;Use Case 2 - Wait for Player
-	
-	
 	BL GAME_START
-	;BL POLL_BUTTONS
-	;BL OUTPUT_TO_LED
 	B GameLoop
 	
 	ENDP
@@ -213,11 +210,7 @@ delay_GameStart   ;delay LED On
 	SUBNE R5, R5, #1
 	BNE delay_GameStart
 	
-	
-	LDR R1, =0x13
-	LDR R2, =0x1
-	STR R1, [R6]
-	STR R2, [R7]
+
 	BX LR
 	ENDP
 	ALIGN
@@ -229,8 +222,8 @@ GAME_START PROC
 ;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;
 ;;;		R0 Score Counter
-;;;		R1 Level Count
-;;;		R2 
+;;;		R1 round count
+;;;		R2 ReactTimer
 ;;;		R3, R4 Store LED codes
 ;;;		
 ;;;		R5 BTN input mask
@@ -252,7 +245,8 @@ GAME_START PROC
 	PUSH {R10}
 	MOV R9, #0
 	MOV R0, #0
-
+	MOV R1, #15
+	LDR R2, =REACT_TIMER
 pickLED
 	LDR R5, =GAME_START_WAIT
 pauseBetween
@@ -333,7 +327,7 @@ pauseBetween
 rnd_LED_ON
 	STR R3, [R6]
 	STR R4, [R7]
-	LDR R9, =REACT_TIMER
+	MOV R9, R2
 wait_for_whack
 	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 	;;;
@@ -358,91 +352,102 @@ wait_for_whack
 	
 moleHit
 	ADD R0, #1
-	CMP R0, #15
-	BEQ endLevel
-
+	SUB R2, #0x5000
 newLED
 	MOV R3, #0x0
 	MOV R4, #0x0
 	STR R3, [R6]
 	STR R4, [R7]
-	
+	SUB R1, #1
+	CMP R1, #0
+	BEQ endGame
 	b pickLED
-	;POP {R10}
-endLevel
+	
+endGame
 	MOV R3, #0x13
 	MOV R4, #0x1
 	STR R3, [R6]
 	STR R4, [R7]
+	LDR R5, =GAME_END_WAIT
+pauseEndGame
+	CMP R5, #0
+	SUBNE R5, R5, #1
+	BNE pauseEndGame
+	
+	LDR R5, =SCORE_DISPLAY
+	CMP R0, #0
+	MOVEQ R3, #0
+	MOVEQ R4, #0
+	
+	CMP R0, #1
+	MOVEQ R3, #0x0
+	MOVEQ R4, #0x1
+	
+	CMP R0, #2
+	MOVEQ R3, #0x10
+	MOVEQ R4, #0x0
+	
+	CMP R0, #3
+	MOVEQ R3, #0x10
+	MOVEQ R4, #0x1
+	
+	CMP R0, #4
+	MOVEQ R3, #0x2
+	MOVEQ R4, #0x0
+	
+	CMP R0, #5
+	MOVEQ R3, #0x2
+	MOVEQ R4, #0x1
+	
+	CMP R0, #6
+	MOVEQ R3, #0x3
+	MOVEQ R4, #0x0
+	
+	CMP R0, #7
+	MOVEQ R3, #0x3
+	MOVEQ R4, #0x1
+	
+	CMP R0, #8
+	MOVEQ R3, #0x10
+	MOVEQ R4, #0x0
+	
+	CMP R0, #9
+	MOVEQ R3, #0x10
+	MOVEQ R4, #0x1
+	
+	CMP R0, #10
+	MOVEQ R3, #0x11
+	MOVEQ R4, #0x0
+	
+	CMP R0, #11
+	MOVEQ R3, #0x11
+	MOVEQ R4, #0x1
+	
+	CMP R0, #12
+	MOVEQ R3, #0x2
+	MOVEQ R4, #0x0
+	
+	CMP R0, #13
+	MOVEQ R3, #0x2
+	MOVEQ R4, #0x1
+	
+	CMP R0, #14
+	MOVEQ R3, #0x13
+	MOVEQ R4, #0x0
+	
+	CMP R0, #15
+	MOVEQ R3, #0x13
+	MOVEQ R4, #0x1
+	
+	STR R3, [R6]
+	STR R4, [R7]
+	
+showScore
+	CMP R5, #0
+	SUBNE R5, R5, #1
+	BNE showScore
 	BX LR
 	ENDP
 	ALIGN
-		
-;POLL_BUTTONS PROC
-;	LDR R3, =0x0
-;	LDR R6, =GPIOB_IDR
-;	LDR R0, [R6]
-;	LDR R1, =0x150  ;0001 0101 0000
-;	AND R0, R1 ;R1 contains switch input for SW0
-
-;	Polling BTN1	
-;	MOV R4, R0
-;	LSR R4, #4
-;	AND R4, #0x1
-;	ORR R3, R4       ;Store BTN 1-3 LED values into R3	
-;	
-;	Polling BTN2
-;	MOV R4, R0
-;	LSR R4, #5
-;	AND R4, #0x2
-;	ORR R3, R4
-;	
-; 	Polling BTN3
-;	MOV R4, R0
-;	LSR R4, #4
-;	AND R4, #0x10
-;	ORR R3, R4
-;	
-;	PUSH {R3} 		;Store LED 1-3 codes on Stack
-
-;	Polling BTN1
-;	LDR R6, =GPIOB_IDR
-;	LDR R0, [R6]
-;	LDR R1, =0x200  ;0010 0000 0000   position of BTN4 code
-;	
-;	AND R0, R1
-;	MOV R3, #0 ;Clear Previous Codes
-;	LSR R0, #9 ;Move code to correct position for LED4
-;	ORR R3, R0
-;	BX LR
-;	ENDP
-;	ALIGN
-;OUTPUT_TO_LED PROC
-;	;; LED 4 is on top of stack
-;	LDR R6, =GPIOB_ODR
-;	LDR R0, [R6]
-;	AND R3, R0
-;	STR R3, [R6]
-;	
-;	;; LED 1-3 stored on stack
-;	POP {R3}
-;	LDR R6, =GPIOA_ODR
-;	LDR R0, [R6]
-;	
-;	AND R3, R0
-;	STR R3, [R6]
-;	
-;	BX LR
-;	ENDP
-;FINISH PROC
-;	LDR R0, =0x1
-;	LDR R6, =GPIOA_ODR
-;	STR R0, [R6]
-;	
-;	LDR R6, =GPIOB_ODR
-;	LDR R0, =0x1
-;	STR R0, [R6]
-;	BX LR
-;	ENDP
 		
 	END
